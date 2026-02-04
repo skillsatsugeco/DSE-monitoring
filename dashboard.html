@@ -1,0 +1,346 @@
+<!DOCTYPE html>
+<html lang="en">
+
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>DSE Elite Analytics Dashboard</title>
+    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;600;700&display=swap" rel="stylesheet">
+    <style>
+        :root {
+            --bg-color: #0f172a;
+            --card-bg: #1e293b;
+            --text-primary: #f8fafc;
+            --text-secondary: #94a3b8;
+            --accent-blue: #38bdf8;
+            --accent-green: #10b981;
+            --accent-red: #ef4444;
+            --border: #334155;
+        }
+
+        body {
+            font-family: 'Inter', sans-serif;
+            background-color: var(--bg-color);
+            color: var(--text-primary);
+            margin: 0;
+            display: flex;
+            min-height: 100vh;
+        }
+
+        /* Sidebar */
+        .sidebar {
+            width: 260px;
+            background: #020617;
+            border-right: 1px solid var(--border);
+            padding: 24px;
+            display: flex;
+            flex-direction: column;
+        }
+
+        .logo {
+            font-size: 1.5rem;
+            font-weight: 700;
+            display: flex;
+            align-items: center;
+            gap: 10px;
+            margin-bottom: 40px;
+        }
+
+        .nav-item {
+            padding: 12px 16px;
+            border-radius: 8px;
+            cursor: pointer;
+            transition: all 0.2s;
+            color: var(--text-secondary);
+            margin-bottom: 8px;
+            display: flex;
+            align-items: center;
+            gap: 12px;
+        }
+
+        .nav-item.active,
+        .nav-item:hover {
+            background: var(--card-bg);
+            color: var(--text-primary);
+        }
+
+        /* Main Content */
+        .main-content {
+            flex: 1;
+            padding: 32px;
+            overflow-y: auto;
+        }
+
+        .header {
+            display: flex;
+            justify-content: space-between;
+            align-items: flex-start;
+            margin-bottom: 32px;
+        }
+
+        .header h1 {
+            margin: 0;
+            font-size: 1.8rem;
+        }
+
+        .sync-status {
+            font-size: 0.85rem;
+            color: var(--text-secondary);
+            background: var(--card-bg);
+            padding: 6px 12px;
+            border-radius: 20px;
+            border: 1px solid var(--border);
+        }
+
+        /* Grid Layout */
+        .grid {
+            display: grid;
+            grid-template-columns: 2fr 1fr;
+            gap: 24px;
+        }
+
+        .card {
+            background: var(--card-bg);
+            border: 1px solid var(--border);
+            border-radius: 12px;
+            padding: 24px;
+            box-shadow: 0 4px 6px -1px rgba(0, 0, 0, 0.1);
+        }
+
+        .card h3 {
+            margin: 0 0 20px 0;
+            font-size: 1.1rem;
+            display: flex;
+            align-items: center;
+            gap: 8px;
+        }
+
+        /* Table Styles */
+        table {
+            width: 100%;
+            border-collapse: collapse;
+        }
+
+        th {
+            text-align: left;
+            padding: 12px;
+            color: var(--text-secondary);
+            font-size: 0.85rem;
+            text-transform: uppercase;
+            letter-spacing: 0.05em;
+            border-bottom: 1px solid var(--border);
+        }
+
+        td {
+            padding: 16px 12px;
+            border-bottom: 1px solid var(--border);
+            font-size: 0.95rem;
+        }
+
+        tr:last-child td {
+            border-bottom: none;
+        }
+
+        tr.clickable {
+            cursor: pointer;
+            transition: background 0.2s;
+        }
+
+        tr.clickable:hover {
+            background: rgba(255, 255, 255, 0.03);
+        }
+
+        /* Indicators */
+        .up {
+            color: var(--accent-green);
+            font-weight: 600;
+        }
+
+        .down {
+            color: var(--accent-red);
+            font-weight: 600;
+        }
+
+        .neutral {
+            color: var(--text-secondary);
+        }
+
+        /* Loader */
+        .loader-overlay {
+            position: fixed;
+            top: 0;
+            left: 0;
+            right: 0;
+            bottom: 0;
+            background: var(--bg-color);
+            display: flex;
+            flex-direction: column;
+            justify-content: center;
+            align-items: center;
+            z-index: 1000;
+        }
+
+        .spinner {
+            width: 40px;
+            height: 40px;
+            border: 4px solid var(--border);
+            border-top: 4px solid var(--accent-blue);
+            border-radius: 50%;
+            animation: spin 1s linear infinite;
+            margin-bottom: 16px;
+        }
+
+        @keyframes spin {
+            100% {
+                transform: rotate(360deg);
+            }
+        }
+
+        /* Chart Area */
+        #chartContainer {
+            min-height: 400px;
+            display: flex;
+            flex-direction: column;
+            justify-content: center;
+        }
+
+        .chart-placeholder {
+            text-align: center;
+            color: var(--text-secondary);
+        }
+
+        /* Search */
+        .search-box {
+            background: var(--card-bg);
+            border: 1px solid var(--border);
+            padding: 8px 16px;
+            border-radius: 8px;
+            width: 300px;
+            color: var(--text-primary);
+            outline: none;
+            margin-bottom: 20px;
+        }
+
+        .search-box:focus {
+            border-color: var(--accent-blue);
+        }
+
+        /* Scrollbar */
+        ::-webkit-scrollbar {
+            width: 8px;
+        }
+
+        ::-webkit-scrollbar-track {
+            background: var(--bg-color);
+        }
+
+        ::-webkit-scrollbar-thumb {
+            background: var(--border);
+            border-radius: 4px;
+        }
+
+        ::-webkit-scrollbar-thumb:hover {
+            background: #475569;
+        }
+    </style>
+</head>
+
+<body>
+    <div id="loader" class="loader-overlay">
+        <div class="spinner"></div>
+        <p>Analyzing Market Streams...</p>
+    </div>
+
+    <!-- Sidebar -->
+    <aside class="sidebar">
+        <div class="logo">
+            <span>🐂</span> DSE ELITE
+        </div>
+        <div class="nav-item active">
+            <span>📊</span> Market Dashboard
+        </div>
+        <div class="nav-item">
+            <span>📋</span> Watchlist
+        </div>
+        <div class="nav-item">
+            <span>🔔</span> Alerts
+        </div>
+        <div style="margin-top: auto; padding-top: 20px;">
+            <div class="nav-item">
+                <span>⚙️</span> Settings
+            </div>
+            <div class="nav-item" onclick="window.location.href='index.html'"
+                style="color: var(--accent-red); margin-top: 10px;">
+                <span>🚪</span> Sign Out
+            </div>
+        </div>
+    </aside>
+
+    <!-- Main Content -->
+    <main class="main-content">
+        <div class="header">
+            <div>
+                <h1>Market Intelligence Dashboard</h1>
+                <p style="color: var(--text-secondary); margin-top: 4px;">Real-time performance metrics for Dar es
+                    Salaam Stock Exchange</p>
+            </div>
+            <div id="lastSync" class="sync-status">Syncing...</div>
+        </div>
+
+        <div class="grid">
+            <!-- Left Column: Table -->
+            <section>
+                <input type="text" id="marketSearch" class="search-box" placeholder="Search security symbol...">
+                <div class="card">
+                    <h3>🔍 Market Overview</h3>
+                    <table id="marketTable">
+                        <thead>
+                            <tr>
+                                <th>Security</th>
+                                <th>Last Price</th>
+                                <th>DoD%</th>
+                                <th>MoM%</th>
+                                <th>Volume</th>
+                            </tr>
+                        </thead>
+                        <tbody id="marketBody">
+                            <!-- Populated via JS -->
+                        </tbody>
+                    </table>
+                </div>
+            </section>
+
+            <!-- Right Column: Top Movers & Individual Chart -->
+            <section style="display: flex; flex-direction: column; gap: 24px;">
+                <div class="card" style="flex: 1;">
+                    <h3>🔥 Top Movers</h3>
+                    <table id="moversTable">
+                        <tbody id="moversBody">
+                            <!-- Populated via JS -->
+                        </tbody>
+                    </table>
+                </div>
+
+                <div class="card" style="flex: 2;">
+                    <div
+                        style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 20px;">
+                        <h3 id="chartLabel" style="margin: 0;">📈 Performance Visualizer</h3>
+                        <span id="chartSymbol"
+                            style="font-size: 0.8rem; background: var(--bg-color); padding: 4px 8px; border-radius: 4px; color: var(--accent-blue); display: none;"></span>
+                    </div>
+                    <div id="chartContainer">
+                        <div class="chart-placeholder">
+                            <p>Click a security symbol from the list to visualize intraday performance.</p>
+                        </div>
+                        <canvas id="mainChart" style="display: none;"></canvas>
+                    </div>
+                </div>
+            </section>
+        </div>
+    </main>
+
+    <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
+    <script src="dashboard.js"></script>
+</body>
+
+</html>

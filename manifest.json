@@ -1,0 +1,18 @@
+{
+    "manifest_version": 3,
+    "name": "DSE Market Analytics",
+    "version": "1.0",
+    "description": "Visualizes DSE market data with DoD, MoM, and YoY analytics.",
+    "action": {
+        "default_popup": "launcher.html",
+        "default_title": "DSE Elite Dashboard",
+        "default_icon": "icon128.png"
+    },
+    "icons": {
+        "128": "icon128.png"
+    },
+    "host_permissions": [
+        "https://script.google.com/*"
+    ],
+    "permissions": []
+}
