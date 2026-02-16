@@ -56,15 +56,20 @@ function renderMainTable(data) {
         tr.className = 'clickable';
         tr.onclick = () => selectSecurity(row.SECURITY);
 
-        const volValue = row.VOL ?? row.VOLUME ?? row["Vol."] ?? 0;
-        const formattedVol = typeof volValue === 'number' ? volValue.toLocaleString() : volValue;
+        const rvol = row.rvol ? row.rvol.toFixed(2) : '-';
+        const signal = row.momentumSignal || 'NEUTRAL';
+        const score = row.tradeScore || 0;
+
+        const scoreClass = score > 0 ? 'score-positive' : (score < 0 ? 'score-negative' : 'score-neutral');
+        const sigClass = getSignalClass(signal);
 
         tr.innerHTML = `
             <td><strong>${row.SECURITY}</strong></td>
             <td>${row.LAST || '-'}</td>
             <td class="${getColorClass(row.DoD)}">${formatPercent(row.DoD)}</td>
-            <td class="${getColorClass(row.MoM)}">${formatPercent(row.MoM)}</td>
-            <td>${formattedVol}</td>
+            <td style="color: ${parseFloat(rvol) > 1.5 ? 'var(--accent-blue)' : 'var(--text-secondary)'}">${rvol}x</td>
+            <td><span class="badge ${sigClass}">${signal.replace('_', ' ')}</span></td>
+            <td><div class="score-box ${scoreClass}">${score}</div></td>
         `;
         tbody.appendChild(tr);
     });
@@ -104,13 +109,29 @@ async function selectSecurity(symbol) {
     const canvas = document.getElementById('mainChart');
     const label = document.getElementById('chartLabel');
     const symbolBadge = document.getElementById('chartSymbol');
+    const signalsPanel = document.getElementById('signalDetails');
+
+    // Find latest row for this security in allMarketData for signals
+    const securityData = allMarketData.find(d => d.SECURITY === symbol);
 
     placeholder.innerHTML = `<div class="spinner" style="margin: 0 auto;"></div><p>Fetching history for ${symbol}...</p>`;
     placeholder.style.display = 'flex';
     canvas.style.display = 'none';
+    signalsPanel.style.display = 'none';
     symbolBadge.style.display = 'inline-block';
     symbolBadge.textContent = symbol;
     label.textContent = "Intraday Performance";
+
+    if (securityData) {
+        document.getElementById('sigLiquidity').textContent = securityData.liquidityScore || 'N/A';
+        document.getElementById('sigHype').textContent = (securityData.hypeRisk || 'NORMAL').replace('_', ' ');
+        document.getElementById('sigAvgVol').textContent = (securityData.avgVol30 || 0).toLocaleString();
+        document.getElementById('sigStable').textContent = securityData.stableTrend ? 'YES (ACCUMULATING)' : 'NO';
+
+        // Color coding
+        document.getElementById('sigLiquidity').style.color = securityData.liquidityScore === 'HIGH' ? 'var(--accent-green)' : 'var(--text-secondary)';
+        document.getElementById('sigHype').style.color = securityData.hypeRisk === 'NORMAL' ? 'var(--text-secondary)' : 'var(--accent-red)';
+    }
 
     try {
         const url = `${BACKEND_URL}${BACKEND_URL.includes('?') ? '&' : '?'}security=${encodeURIComponent(symbol)}`;
@@ -122,8 +143,10 @@ async function selectSecurity(symbol) {
                 renderChart(json.data, symbol);
                 placeholder.style.display = 'none';
                 canvas.style.display = 'block';
+                signalsPanel.style.display = 'block';
             } else {
                 placeholder.innerHTML = `<p>🚀 No recent intraday trades found for ${symbol}.<br><span style="font-size: 0.8rem;">Showing last known daily close.</span></p>`;
+                signalsPanel.style.display = 'block';
             }
         }
     } catch (e) {
@@ -234,4 +257,15 @@ function getColorClass(val) {
     if (val === null || val === undefined || isNaN(val)) return "neutral";
     if (Math.abs(val) < 0.0001) return "neutral";
     return val > 0 ? "up" : "down";
+}
+
+function getSignalClass(sig) {
+    switch (sig) {
+        case 'CONFIRMED_UP': return 'badge-confirmed';
+        case 'WEAK_UP': return 'badge-weak';
+        case 'STRONG_SELL': return 'badge-sell';
+        case 'HYPE_RISK': return 'badge-hype';
+        case 'BREAKOUT': return 'badge-breakout';
+        default: return 'badge-neutral';
+    }
 }
