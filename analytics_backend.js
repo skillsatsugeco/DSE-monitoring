@@ -220,7 +220,10 @@ function getComputedAnalytics() {
     console.log("Daily rows aggregated: " + dailyData.length);
 
     console.log("Computing returns...");
-    return computeReturns(dailyData);
+    const withReturns = computeReturns(dailyData);
+
+    console.log("Computing market signals...");
+    return computeMarketSignals(withReturns);
 }
 
 /**
@@ -343,7 +346,89 @@ function calcReturn(rows, index, lag) {
 
     if (isNaN(today) || isNaN(past) || past === 0) return null;
 
+
     return (today - past) / past;
+}
+
+/**
+ * NEW: Adaptive trading signals based on Relative Volume and Momentum.
+ */
+function computeMarketSignals(data) {
+    // Group by SECURITY
+    const grouped = {};
+    data.forEach(row => {
+        const security = row.SECURITY;
+        if (!security) return;
+        if (!grouped[security]) grouped[security] = [];
+        grouped[security].push(row);
+    });
+
+    // Process each security
+    Object.keys(grouped).forEach(security => {
+        const rows = grouped[security];
+
+        // Sort by timestamp
+        rows.sort((a, b) => {
+            const getT = (r) => (r.TIMESTAMP instanceof Date) ? r.TIMESTAMP.getTime() : new Date(r.TIMESTAMP).getTime();
+            return getT(a) - getT(b);
+        });
+
+        rows.forEach((row, i) => {
+            // 1. Average Volume (avgVol30)
+            // Window: last 30 rows including current
+            const windowSize = 30;
+            const startIdx = Math.max(0, i - windowSize + 1);
+            const windowRows = rows.slice(startIdx, i + 1);
+
+            const sumVol = windowRows.reduce((sum, r) => {
+                const vol = parseFloat(r.VOL) || 0;
+                return sum + vol;
+            }, 0);
+
+            row.avgVol30 = windowRows.length > 0 ? sumVol / windowRows.length : 0;
+
+            // 2. Relative Volume (RVOL)
+            row.rvol = (row.avgVol30 && row.avgVol30 > 0) ? (row.VOL / row.avgVol30) : null;
+
+            // 3. Liquidity Score
+            if (row.avgVol30 >= 100000) row.liquidityScore = "HIGH";
+            else if (row.avgVol30 >= 20000) row.liquidityScore = "MEDIUM";
+            else row.liquidityScore = "LOW";
+
+            // 4. Momentum Signal
+            const rvol = row.rvol || 0;
+            const dod = row.DoD || 0;
+            if (dod > 0 && rvol > 1.5) row.momentumSignal = "CONFIRMED_UP";
+            else if (dod > 0 && rvol <= 1) row.momentumSignal = "WEAK_UP";
+            else if (dod < 0 && rvol > 1.5) row.momentumSignal = "STRONG_SELL";
+            else row.momentumSignal = "NEUTRAL";
+
+            // 5. Hype Risk
+            if (dod > 0.08 && rvol < 1) row.hypeRisk = "HYPE_RISK";
+            else if (dod > 0.08 && rvol > 2) row.hypeRisk = "BREAKOUT";
+            else row.hypeRisk = "NORMAL";
+
+            // 6. Stable Accumulation
+            row.stableTrend = (dod >= 0 && dod <= 0.03 && rvol > 1.2);
+
+            // 7. Trade Score
+            let score = 0;
+            if (row.liquidityScore === "HIGH") score += 2;
+            if (row.momentumSignal === "CONFIRMED_UP") score += 2;
+            if (row.stableTrend === true) score += 1;
+            if (row.hypeRisk === "HYPE_RISK") score -= 2;
+            if (row.momentumSignal === "STRONG_SELL") score -= 1;
+            row.tradeScore = score;
+        });
+    });
+
+    // Flatten back to array
+    const result = [];
+    Object.values(grouped).forEach(rows => {
+        result.push(...rows);
+    });
+
+    return result;
 }
 
 /**
@@ -434,6 +519,15 @@ function testAnalytics() {
         console.log("Date:", sample.TIMESTAMP);
         console.log("Last Price:", sample.LAST);
         if (sample.DoD !== null) console.log("DoD Change:", (sample.DoD * 100).toFixed(2) + "%");
+
+        console.log("--- Market Signals ---");
+        console.log("Avg Vol 30:", sample.avgVol30);
+        console.log("Relative Vol:", sample.rvol);
+        console.log("Liquidity:", sample.liquidityScore);
+        console.log("Momentum:", sample.momentumSignal);
+        console.log("Hype Risk:", sample.hypeRisk);
+        console.log("Stable Trend:", sample.stableTrend);
+        console.log("Trade Score:", sample.tradeScore);
 
         // --- NEW: Test the daily chart ---
         console.log("Attempting to create intraday chart for:", sample.SECURITY);
