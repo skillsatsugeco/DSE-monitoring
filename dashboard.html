@@ -165,6 +165,98 @@
             color: var(--text-secondary);
         }
 
+        /* Signal Badges */
+        .badge {
+            padding: 4px 8px;
+            border-radius: 4px;
+            font-size: 0.75rem;
+            font-weight: 600;
+            text-transform: uppercase;
+        }
+
+        .badge-confirmed {
+            background: rgba(16, 185, 129, 0.2);
+            color: #10b981;
+        }
+
+        .badge-weak {
+            background: rgba(56, 189, 248, 0.2);
+            color: #38bdf8;
+        }
+
+        .badge-sell {
+            background: rgba(239, 68, 68, 0.2);
+            color: #ef4444;
+        }
+
+        .badge-neutral {
+            background: rgba(148, 163, 184, 0.2);
+            color: #94a3b8;
+        }
+
+        .badge-hype {
+            background: rgba(245, 158, 11, 0.2);
+            color: #f59e0b;
+        }
+
+        .badge-breakout {
+            background: rgba(139, 92, 246, 0.2);
+            color: #8b5cf6;
+        }
+
+        .score-box {
+            display: inline-flex;
+            align-items: center;
+            justify-content: center;
+            width: 28px;
+            height: 28px;
+            border-radius: 50%;
+            font-weight: 700;
+            font-size: 0.85rem;
+        }
+
+        .score-positive {
+            background: var(--accent-green);
+            color: white;
+        }
+
+        .score-negative {
+            background: var(--accent-red);
+            color: white;
+        }
+
+        .score-neutral {
+            background: var(--border);
+            color: var(--text-secondary);
+        }
+
+        .signals-grid {
+            display: grid;
+            grid-template-columns: repeat(2, 1fr);
+            gap: 12px;
+            margin-top: 16px;
+        }
+
+        .signal-card {
+            background: rgba(255, 255, 255, 0.03);
+            border: 1px solid var(--border);
+            padding: 12px;
+            border-radius: 8px;
+        }
+
+        .signal-card label {
+            display: block;
+            font-size: 0.7rem;
+            color: var(--text-secondary);
+            text-transform: uppercase;
+            margin-bottom: 4px;
+        }
+
+        .signal-card span {
+            font-weight: 600;
+            font-size: 0.9rem;
+        }
+
         /* Loader */
         .loader-overlay {
             position: fixed;
@@ -297,10 +389,11 @@
                         <thead>
                             <tr>
                                 <th>Security</th>
-                                <th>Last Price</th>
+                                <th>Price</th>
                                 <th>DoD%</th>
-                                <th>MoM%</th>
-                                <th>Volume</th>
+                                <th>RVOL</th>
+                                <th>Signal</th>
+                                <th>Score</th>
                             </tr>
                         </thead>
                         <tbody id="marketBody">
@@ -330,9 +423,33 @@
                     </div>
                     <div id="chartContainer">
                         <div class="chart-placeholder">
-                            <p>Click a security symbol from the list to visualize intraday performance.</p>
+                            <p>Click a security symbol from the list to visualize signals and performance.</p>
                         </div>
-                        <canvas id="mainChart" style="display: none;"></canvas>
+                        <canvas id="mainChart" style="display: none; height: 250px !important;"></canvas>
+                    </div>
+
+                    <div id="signalDetails"
+                        style="display: none; border-top: 1px solid var(--border); margin-top: 20px; padding-top: 20px;">
+                        <h4 style="margin: 0 0 12px 0; font-size: 0.9rem; color: var(--text-secondary);">Adaptive
+                            Trading Signals</h4>
+                        <div class="signals-grid">
+                            <div class="signal-card">
+                                <label>Liquidity</label>
+                                <span id="sigLiquidity">-</span>
+                            </div>
+                            <div class="signal-card">
+                                <label>Hype Risk</label>
+                                <span id="sigHype">-</span>
+                            </div>
+                            <div class="signal-card">
+                                <label>30D Avg Vol</label>
+                                <span id="sigAvgVol">-</span>
+                            </div>
+                            <div class="signal-card">
+                                <label>Stable Accumulation</label>
+                                <span id="sigStable">-</span>
+                            </div>
+                        </div>
                     </div>
                 </div>
             </section>
