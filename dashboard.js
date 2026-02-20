@@ -1,4 +1,4 @@
-const BACKEND_URL = "https://script.google.com/macros/s/AKfycbzujsNLQd1zzuVsjNi0C5vuqI7nPzirW-ERf6pcnVF5T57ooLRIauMWXZkkMnVNFTOa/exec";
+const BACKEND_URL = "https://script.google.com/macros/s/AKfycbyGbGdLL8_VyfL-y9v7wFlQSEuGMHETics49oehlZud7ajn-QP_9Lo_DTZWbBh0UY8h/exec";
 
 let allMarketData = [];
 let mainChart = null;
@@ -13,21 +13,37 @@ document.addEventListener('DOMContentLoaded', () => {
 });
 
 async function fetchMarketData() {
+    const syncEl = document.getElementById('lastSync');
     try {
-        const response = await fetch(BACKEND_URL);
-        const json = await response.json();
+        syncEl.textContent = "Updating Market Map...";
+        syncEl.style.color = "var(--text-secondary)";
 
-        if (json.status === "success" && json.data) {
+        console.log("Fetching from:", BACKEND_URL);
+        const response = await fetch(BACKEND_URL);
+
+        if (!response.ok) throw new Error(`Server returned ${response.status}`);
+
+        const json = await response.json();
+        console.log("Data received:", json);
+
+        if (json.status === "success" && json.data && json.data.length > 0) {
             allMarketData = getLatestPerSecurity(json.data);
+            console.log("Processed data:", allMarketData);
             renderDashboard();
             hideLoader();
             updateLastSync();
         } else {
-            alert("Error loading data: " + (json.message || "Check your backend connection"));
+            const msg = json.message || (json.data && json.data.length === 0 ? "No data found in your spreadsheet" : "Invalid data format");
+            syncEl.textContent = "⚠️ " + msg;
+            syncEl.style.color = "var(--accent-red)";
+            console.error("Data Error:", msg);
+            hideLoader();
         }
     } catch (err) {
         console.error("Fetch Error:", err);
-        alert("Connection failed. Ensure the Apps Script is deployed as 'Anyone'.");
+        syncEl.textContent = "⚠️ Connection Failed";
+        syncEl.style.color = "var(--accent-red)";
+        hideLoader();
     }
 }
 
@@ -57,18 +73,29 @@ function renderMainTable(data) {
         tr.onclick = () => selectSecurity(row.SECURITY);
 
         const rvol = row.rvol ? row.rvol.toFixed(2) : '-';
-        const signal = row.momentumSignal || 'NEUTRAL';
-        const score = row.tradeScore || 0;
 
+        // Priority: Hype/Breakout > Momentum
+        let displaySignal = row.momentumSignal || 'NEUTRAL';
+        if (row.hypeRisk && row.hypeRisk !== 'NORMAL') {
+            displaySignal = row.hypeRisk;
+        }
+
+        const score = row.tradeScore || 0;
         const scoreClass = score > 0 ? 'score-positive' : (score < 0 ? 'score-negative' : 'score-neutral');
-        const sigClass = getSignalClass(signal);
+        const sigClass = getSignalClass(displaySignal);
 
         tr.innerHTML = `
-            <td><strong>${row.SECURITY}</strong></td>
-            <td>${row.LAST || '-'}</td>
+            <td style="border-left: 4px solid ${score > 3 ? 'var(--accent-green)' : 'transparent'};">
+                <div style="font-weight: 700;">${row.SECURITY}</div>
+                <div style="font-size: 0.7rem; color: var(--text-secondary);">${row.TIMESTAMP ? row.TIMESTAMP.toString().split(' ')[0] : ''}</div>
+            </td>
+            <td><strong>${row.LAST || '-'}</strong></td>
             <td class="${getColorClass(row.DoD)}">${formatPercent(row.DoD)}</td>
-            <td style="color: ${parseFloat(rvol) > 1.5 ? 'var(--accent-blue)' : 'var(--text-secondary)'}">${rvol}x</td>
-            <td><span class="badge ${sigClass}">${signal.replace('_', ' ')}</span></td>
+            <td style="color: ${parseFloat(rvol) > 1.5 ? 'var(--accent-blue)' : 'var(--text-secondary)'}">
+                ${rvol}x
+                <div style="font-size: 0.65rem; opacity: 0.6;">RVOL</div>
+            </td>
+            <td><span class="badge ${sigClass}">${displaySignal.replace('_', ' ')}</span></td>
             <td><div class="score-box ${scoreClass}">${score}</div></td>
         `;
         tbody.appendChild(tr);
@@ -255,8 +282,9 @@ function formatPercent(val) {
 
 function getColorClass(val) {
     if (val === null || val === undefined || isNaN(val)) return "neutral";
-    if (Math.abs(val) < 0.0001) return "neutral";
-    return val > 0 ? "up" : "down";
+    const num = parseFloat(val);
+    if (Math.abs(num) < 0.000001) return "neutral";
+    return num > 0 ? "up" : "down";
 }
 
 function getSignalClass(sig) {
