@@ -1,5 +1,5 @@
 // REPLACE THIS with your deployed Web App URL from analytics_backend.js
-const BACKEND_URL = "https://script.google.com/macros/s/AKfycbzujsNLQd1zzuVsjNi0C5vuqI7nPzirW-ERf6pcnVF5T57ooLRIauMWXZkkMnVNFTOa/exec";
+const BACKEND_URL = "https://script.google.com/macros/s/AKfycbyGbGdLL8_VyfL-y9v7wFlQSEuGMHETics49oehlZud7ajn-QP_9Lo_DTZWbBh0UY8h/exec";
 
 document.addEventListener('DOMContentLoaded', () => {
     if (BACKEND_URL.includes("REPLACE")) {
