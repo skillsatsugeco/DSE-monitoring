@@ -8,14 +8,16 @@
     <link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;600;700&display=swap" rel="stylesheet">
     <style>
         :root {
-            --bg-color: #0f172a;
-            --card-bg: #1e293b;
+            --bg-color: #030712;
+            --sidebar-bg: #030712;
+            --card-bg: #111827;
             --text-primary: #f8fafc;
             --text-secondary: #94a3b8;
             --accent-blue: #38bdf8;
             --accent-green: #10b981;
             --accent-red: #ef4444;
-            --border: #334155;
+            --border: rgba(255, 255, 255, 0.05);
+            --header-bg: rgba(17, 24, 39, 0.8);
         }
 
         body {
@@ -30,11 +32,14 @@
         /* Sidebar */
         .sidebar {
             width: 260px;
-            background: #020617;
+            background: var(--sidebar-bg);
             border-right: 1px solid var(--border);
-            padding: 24px;
+            padding: 32px 24px;
             display: flex;
             flex-direction: column;
+            position: sticky;
+            top: 0;
+            height: 100vh;
         }
 
         .logo {
@@ -60,8 +65,8 @@
 
         .nav-item.active,
         .nav-item:hover {
-            background: var(--card-bg);
-            color: var(--text-primary);
+            background: rgba(56, 189, 248, 0.1);
+            color: var(--accent-blue);
         }
 
         /* Main Content */
@@ -102,9 +107,10 @@
         .card {
             background: var(--card-bg);
             border: 1px solid var(--border);
-            border-radius: 12px;
-            padding: 24px;
-            box-shadow: 0 4px 6px -1px rgba(0, 0, 0, 0.1);
+            border-radius: 16px;
+            padding: 28px;
+            box-shadow: 0 4px 20px -5px rgba(0, 0, 0, 0.3);
+            backdrop-filter: blur(10px);
         }
 
         .card h3 {
@@ -147,7 +153,7 @@
         }
 
         tr.clickable:hover {
-            background: rgba(255, 255, 255, 0.03);
+            background: rgba(56, 189, 248, 0.05);
         }
 
         /* Indicators */
@@ -218,11 +224,13 @@
         .score-positive {
             background: var(--accent-green);
             color: white;
+            box-shadow: 0 0 10px rgba(16, 185, 129, 0.4);
         }
 
         .score-negative {
             background: var(--accent-red);
             color: white;
+            box-shadow: 0 0 10px rgba(239, 68, 68, 0.4);
         }
 
         .score-neutral {
