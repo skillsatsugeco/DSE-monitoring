@@ -16,6 +16,54 @@ const TRADING_DAYS = {
     YOY: 252
 };
 
+/**
+ * Handle POST requests from the Chrome Extension Scraper
+ */
+function doPost(e) {
+    try {
+        const rawData = JSON.parse(e.postData.contents);
+        const ss = SpreadsheetApp.openById(SPREADSHEET_ID);
+        const sheet = ss.getSheets()[0];
+
+        // Ensure headers exist if sheet is empty
+        if (sheet.getLastRow() === 0) {
+            sheet.appendRow(["SECURITY", "LAST", "TIME", "TIMESTAMP", "VOL", "BID", "ASK", "BID QTY", "ASK QTY"]);
+        }
+
+        // Handle single object or array of objects
+        const dataArray = Array.isArray(rawData) ? rawData : [rawData];
+        const now = new Date();
+
+        dataArray.forEach(item => {
+            // Mapping incoming data to sheet columns
+            const clean = (v) => v ? (v.toString().replace(/,/g, '').trim()) : 0;
+
+            sheet.appendRow([
+                (item.security || item.ticker || item.symbol || "").toUpperCase(),
+                clean(item.last || item.price || 0),
+                item.time || Utilities.formatDate(now, Session.getScriptTimeZone(), "HH:mm:ss"),
+                now,
+                clean(item.vol || item.volume || 0),
+                clean(item.bid || 0),
+                clean(item.ask || item.offer || 0),
+                clean(item.bidQty || 0),
+                clean(item.askQty || 0)
+            ]);
+        });
+
+        return ContentService.createTextOutput(JSON.stringify({
+            status: "success",
+            rows_added: dataArray.length
+        })).setMimeType(ContentService.MimeType.JSON);
+
+    } catch (err) {
+        return ContentService.createTextOutput(JSON.stringify({
+            status: "error",
+            message: err.toString()
+        })).setMimeType(ContentService.MimeType.JSON);
+    }
+}
+
 function doGet(e) {
     try {
         const security = e.parameter.security;
@@ -51,11 +99,27 @@ function getIntradayHistory(securitySymbol) {
     const values = sheet.getDataRange().getValues();
     if (values.length < 2) return [];
 
-    const headers = values[0];
-    const secIdx = headers.indexOf("SECURITY");
-    const lastIdx = headers.indexOf("LAST");
-    const timeIdx = headers.indexOf("TIME");
-    const tsIdx = headers.indexOf("TIMESTAMP");
+    const headers = values[0].map(h => h.toString().trim().toUpperCase());
+
+    // Flexible header detection
+    const findIdx = (aliases) => {
+        return headers.findIndex(h => aliases.includes(h));
+    };
+
+    const secIdx = findIdx(["SECURITY", "SYMBOL", "TICKER", "SEC"]);
+    const lastIdx = findIdx(["LAST", "PRICE", "CLOSE", "LTP"]);
+    const tsIdx = findIdx(["TIMESTAMP", "DATE", "TS"]);
+    const timeIdx = findIdx(["TIME", "CLOCK"]);
+    const volIdx = findIdx(["VOL", "VOLUME", "VOL.", "QTY"]);
+    const bidIdx = findIdx(["BID", "BUY"]);
+    const askIdx = findIdx(["ASK", "OFFER", "SELL"]);
+    const bidQtyIdx = findIdx(["BID QTY", "BUY QTY", "BID_QTY"]);
+    const askQtyIdx = findIdx(["ASK QTY", "SELL QTY", "ASK_QTY"]);
+
+    if (secIdx === -1 || lastIdx === -1) {
+        console.error("Critical columns missing. Found headers: " + headers.join(", "));
+        return [];
+    }
 
     // 1. Find the LATEST date that this specific security has data for
     let targetDateStr = null;
@@ -65,10 +129,11 @@ function getIntradayHistory(securitySymbol) {
         const rowSec = (values[i][secIdx] || "").toString().trim().toUpperCase();
         if (rowSec === searchSymbol) {
             const ts = values[i][tsIdx];
+            if (!ts) continue;
             targetDateStr = ts instanceof Date ?
                 Utilities.formatDate(ts, Session.getScriptTimeZone(), "yyyy-MM-dd") :
                 ts.toString().split(" ")[0];
-            break;
+            if (targetDateStr) break;
         }
     }
 
@@ -77,61 +142,44 @@ function getIntradayHistory(securitySymbol) {
         return [];
     }
 
-    console.log("Target Date found: " + targetDateStr);
-
     // 2. Filter data for that security on that specific date
     let rawTicks = [];
-    const findHeader = (name) => {
-        const lowerName = name.toLowerCase();
-        return headers.findIndex(h => h.toString().toLowerCase().trim() === lowerName);
+    const cleanVal = (v) => {
+        if (v === null || v === undefined || v === "") return 0;
+        if (typeof v === 'number') return v;
+        const str = v.toString().replace(/,/g, '').trim();
+        return parseFloat(str) || 0;
     };
-
-    const bidIdx = findHeader("BID");
-    const bidQtyIdx = findHeader("BID QTY");
-    const askIdx = findHeader("OFFER") === -1 ? findHeader("ASK") : findHeader("OFFER");
-    const askQtyIdx = findHeader("ASK QTY");
 
     values.slice(1).forEach(row => {
         const rowSec = (row[secIdx] || "").toString().trim().toUpperCase();
         const rowTS = row[tsIdx];
+        if (!rowTS) return;
+
         const rowDateStr = rowTS instanceof Date ?
             Utilities.formatDate(rowTS, Session.getScriptTimeZone(), "yyyy-MM-dd") :
             rowTS.toString().split(" ")[0];
 
         if (rowSec === searchSymbol && rowDateStr === targetDateStr) {
-            // Use TIMESTAMP (capture time) for the chart axis so we see the full continuum
-            const rowTS = row[tsIdx];
             let label = "";
             if (rowTS instanceof Date) label = Utilities.formatDate(rowTS, Session.getScriptTimeZone(), "HH:mm");
             else {
-                // Try to parse string timestamp
                 const d = new Date(rowTS);
                 label = !isNaN(d.getTime()) ? Utilities.formatDate(d, Session.getScriptTimeZone(), "HH:mm") : rowTS.toString().split(" ")[1] || "??";
             }
 
-            // Sortable time value
             const sortTime = rowTS instanceof Date ? rowTS.getTime() : new Date(rowTS).getTime();
-
-            // Volume tracking
-            const volIdx = findHeader("VOL") === -1 ? (findHeader("VOLUME") === -1 ? findHeader("VOL.") : findHeader("VOLUME")) : findHeader("VOL");
-            const rawVolVal = row[volIdx] || 0;
-            const cleanVol = typeof rawVolVal === 'string' ? parseFloat(rawVolVal.replace(/,/g, '')) : parseFloat(rawVolVal);
-
-            // Depth data (Handle commas)
-            const cleanVal = (v) => {
-                if (typeof v === 'string') return parseFloat(v.replace(/,/g, '')) || 0;
-                return parseFloat(v) || 0;
-            };
+            const cleanVol = cleanVal(row[volIdx]);
 
             rawTicks.push({
                 time: label,
-                price: parseFloat(row[lastIdx]),
+                price: cleanVal(row[lastIdx]),
                 sortVal: sortTime,
                 rawVol: isNaN(cleanVol) ? 0 : cleanVol,
-                bid: cleanVal(row[bidIdx]),
-                ask: cleanVal(row[askIdx]),
-                bidQty: cleanVal(row[bidQtyIdx]),
-                askQty: cleanVal(row[askQtyIdx])
+                bid: bidIdx !== -1 ? cleanVal(row[bidIdx]) : 0,
+                ask: askIdx !== -1 ? cleanVal(row[askIdx]) : 0,
+                bidQty: bidQtyIdx !== -1 ? cleanVal(row[bidQtyIdx]) : 0,
+                askQty: askQtyIdx !== -1 ? cleanVal(row[askQtyIdx]) : 0
             });
         }
     });
@@ -198,31 +246,40 @@ function getComputedAnalytics() {
     console.log("Opening spreadsheet: " + SPREADSHEET_ID);
     const ss = SpreadsheetApp.openById(SPREADSHEET_ID);
     const sheet = ss.getSheets()[0];
-    if (!sheet) throw new Error("No sheets found in the spreadsheet.");
+    if (!sheet) throw new Error("No sheets found. Check Spreadsheet ID and permissions.");
 
-    console.log("Reading data from sheet: " + sheet.getName());
     const values = sheet.getDataRange().getValues();
-    console.log("Total rows in sheet: " + values.length);
-
     if (values.length < 2) return [];
 
     const headers = values[0].map(h => h.toString().trim().toUpperCase());
+
+    // Mapping keys to indices
+    const findIdx = (aliases) => headers.findIndex(h => aliases.includes(h));
+    const map = {
+        security: findIdx(["SECURITY", "SYMBOL", "TICKER", "SEC"]),
+        last: findIdx(["LAST", "PRICE", "CLOSE", "LTP"]),
+        vol: findIdx(["VOL", "VOLUME", "VOL.", "QTY"]),
+        ts: findIdx(["TIMESTAMP", "DATE", "TS"]),
+        time: findIdx(["TIME", "CLOCK"])
+    };
+
+    if (map.security === -1 || map.last === -1 || map.ts === -1) {
+        throw new Error("Missing required columns: SECURITY, LAST, and TIMESTAMP/DATE are required.");
+    }
+
     const rawData = values.slice(1).map(row => {
         const obj = {};
-        headers.forEach((h, i) => {
-            obj[h] = row[i];
-        });
+        obj.SECURITY = row[map.security];
+        obj.LAST = row[map.last];
+        obj.VOL = row[map.vol] !== -1 ? row[map.vol] : 0;
+        obj.TIMESTAMP = row[map.ts];
+        obj.TIME = map.time !== -1 ? row[map.time] : null;
         return obj;
     });
 
-    console.log("Aggregating daily closes...");
+    console.log("Daily rows aggregated: " + rawData.length);
     const dailyData = aggregateDailyCloses(rawData);
-    console.log("Daily rows aggregated: " + dailyData.length);
-
-    console.log("Computing returns...");
     const withReturns = computeReturns(dailyData);
-
-    console.log("Computing market signals...");
     return computeMarketSignals(withReturns);
 }
 
@@ -234,20 +291,17 @@ function aggregateDailyCloses(data) {
 
     data.forEach((row, idx) => {
         try {
-            const security = row.SECURITY;
+            const security = row.SECURITY ? row.SECURITY.toString().trim().toUpperCase() : null;
             if (!security || !row.TIMESTAMP) return;
 
-            // Handle TIMESTAMP (could be Date object from Apps Script or string)
+            // Handle TIMESTAMP
             let dateStr = "";
-            if (row.TIMESTAMP instanceof Date) {
-                dateStr = Utilities.formatDate(row.TIMESTAMP, Session.getScriptTimeZone(), "yyyy-MM-dd");
+            const ts = row.TIMESTAMP;
+            if (ts instanceof Date) {
+                dateStr = Utilities.formatDate(ts, Session.getScriptTimeZone(), "yyyy-MM-dd");
             } else {
-                const d = new Date(row.TIMESTAMP);
-                if (!isNaN(d.getTime())) {
-                    dateStr = Utilities.formatDate(d, Session.getScriptTimeZone(), "yyyy-MM-dd");
-                } else {
-                    dateStr = row.TIMESTAMP.toString().split(" ")[0];
-                }
+                const d = new Date(ts);
+                dateStr = !isNaN(d.getTime()) ? Utilities.formatDate(d, Session.getScriptTimeZone(), "yyyy-MM-dd") : ts.toString().split(" ")[0];
             }
 
             const key = `${security}_${dateStr}`;
@@ -256,39 +310,30 @@ function aggregateDailyCloses(data) {
                 try {
                     if (r.TIME instanceof Date) return r.TIME.getTime();
                     if (!r.TIME) return (r.TIMESTAMP instanceof Date) ? r.TIMESTAMP.getTime() : new Date(r.TIMESTAMP).getTime();
-                    const d = new Date(`${dateStr} ${r.TIME}`);
-                    return !isNaN(d.getTime()) ? d.getTime() : ((r.TIMESTAMP instanceof Date) ? r.TIMESTAMP.getTime() : new Date(r.TIMESTAMP).getTime());
+                    return new Date(`${dateStr} ${r.TIME}`).getTime() || ((r.TIMESTAMP instanceof Date) ? r.TIMESTAMP.getTime() : new Date(r.TIMESTAMP).getTime());
                 } catch (e) { return 0; }
             };
 
             const currentTickTime = getTimeValue(row);
+            const clean = (v) => {
+                if (v === null || v === undefined) return 0;
+                if (typeof v === 'number') return v;
+                return parseFloat(v.toString().replace(/,/g, '')) || 0;
+            };
 
-            // Volume normalization (handle headers like VOL, VOLUME, Vol.)
-            const rawVol = row.VOL || row.VOLUME || row["Vol."] || 0;
-            const volNum = typeof rawVol === 'string' ? parseFloat(rawVol.replace(/,/g, '')) : parseFloat(rawVol);
-            const cleanVol = isNaN(volNum) ? 0 : volNum;
+            const cleanVol = clean(row.VOL);
+            const cleanPrice = clean(row.LAST);
 
             if (!daily[key]) {
-                daily[key] = { ...row, VOL: cleanVol }; // Start with this row's volume
+                daily[key] = { ...row, SECURITY: security, LAST: cleanPrice, VOL: cleanVol, _time: currentTickTime };
+            } else if (currentTickTime >= daily[key]._time) {
+                const totalVol = Math.max(daily[key].VOL, cleanVol);
+                daily[key] = { ...row, SECURITY: security, LAST: cleanPrice, VOL: totalVol, _time: currentTickTime };
             } else {
-                const existingTickTime = getTimeValue(daily[key]);
-
-                // If this is a LATER tick, update the price/status info
-                if (currentTickTime > existingTickTime) {
-                    const totalVolSoFar = daily[key].VOL;
-                    daily[key] = { ...row };
-                    // If DSE data is cumulative, we just take the new one. 
-                    // If it's trade-by-trade, we sum it. 
-                    // Most traders prefer "Last known Volume" if it grows, or Sum if it's tick.
-                    // Let's assume Max (cumulative) to be safe for DSE.
-                    daily[key].VOL = Math.max(totalVolSoFar, cleanVol);
-                } else {
-                    // Even if it's an older tick, it might have volume info we missed
-                    daily[key].VOL = Math.max(daily[key].VOL, cleanVol);
-                }
+                daily[key].VOL = Math.max(daily[key].VOL, cleanVol);
             }
         } catch (err) {
-            console.error(`Error processing row ${idx}: ${err.message}`);
+            console.error(`Row ${idx} error: ${err.message}`);
         }
     });
 
@@ -341,11 +386,16 @@ function computeReturns(data) {
 function calcReturn(rows, index, lag) {
     if (index < lag) return null;
 
-    const today = parseFloat(rows[index].LAST);
-    const past = parseFloat(rows[index - lag].LAST);
+    const clean = (v) => {
+        if (v === null || v === undefined) return 0;
+        if (typeof v === 'number') return v;
+        return parseFloat(v.toString().replace(/,/g, '')) || 0;
+    };
 
-    if (isNaN(today) || isNaN(past) || past === 0) return null;
+    const today = clean(rows[index].LAST);
+    const past = clean(rows[index - lag].LAST);
 
+    if (today === 0 || past === 0) return null;
 
     return (today - past) / past;
 }
